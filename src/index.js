@@ -66,6 +66,7 @@ class PapertrailLogging {
       handler: `${PapertrailLogging.getFunctionName()}/handler.handler`,
       name: loggerFunctionFullName,
       tags: _.has(this.service.provider, 'stackTags') ? this.service.provider.stackTags : {},
+      runtime: 'nodejs6.10',
       events: [],
     };
   }
