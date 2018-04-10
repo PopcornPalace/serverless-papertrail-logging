@@ -3,6 +3,8 @@
 const _ = require('lodash');
 const fs = require('fs');
 const path = require('path');
+var AdmZip = require('adm-zip');
+
 
 class PapertrailLogging {
   constructor(serverless) {
@@ -61,12 +63,20 @@ class PapertrailLogging {
       .replace('%papertrailPort%', this.service.custom.papertrail.port)
       .replace('%papertrailHostname%', this.service.service)
       .replace('%papertrailProgram%', this.service.provider.stage);
-    fs.writeFileSync(path.join(functionPath, 'handler.js'), handlerFunction);
+
+
+      var zip = new AdmZip();
+      zip.addFile(path.join(functionPath, 'handler.js'), new Buffer(handlerFunction), "Logger Function");
+      zip.writeZip("./logger.zip");
+
     this.service.functions[PapertrailLogging.getFunctionName()] = {
       handler: `${PapertrailLogging.getFunctionName()}/handler.handler`,
       name: loggerFunctionFullName,
       tags: _.has(this.service.provider, 'stackTags') ? this.service.provider.stackTags : {},
       runtime: 'nodejs6.10',
+      package: {
+        artifact: "./logger.zip"
+      },
       events: [],
     };
   }
@@ -122,19 +132,6 @@ class PapertrailLogging {
   }
 
   afterDeployDeploy() {
-    this.serverless.cli.log('Removing temporary logger function');
-    let functionPath = this.getEnvFilePath();
-
-    try {
-      if (fs.existsSync(functionPath)) {
-        if (fs.existsSync(path.join(functionPath, 'handler.js'))) {
-          fs.unlinkSync(path.join(functionPath, 'handler.js'));
-        }
-        fs.rmdirSync(functionPath);
-      }
-    } catch (err) {
-      throw new Error(err);
-    }
   }
 }
 
