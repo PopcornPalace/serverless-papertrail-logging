@@ -10,88 +10,18 @@ class PapertrailLogging {
   constructor(serverless) {
     this.serverless = serverless;
     this.service = serverless.service;
+    this.loggerFnName = `${this.service.custom.stage}-all-to-papertrail`
 
     this.provider = this.serverless.getProvider('aws');
 
     this.hooks = {
-      'before:package:createDeploymentArtifacts': this.beforePackageCreateDeploymentArtifacts.bind(this),
-      'before:package:compileEvents': this.beforePackageCompileEvents.bind(this),
-      'after:deploy:deploy': this.afterDeployDeploy.bind(this),
-    };
-
-    if (!_.has(this.service, 'custom.papertrail.port')) {
-      throw new this.serverless.classes.Error('Configure Papertrail port in custom.papertrail.port of the serverless.yml');
+      'before:package:compileEvents': this.beforePackageCompileEvents.bind(this)
     }
-
-    this.papertrailHost = _.get(this.service, 'custom.papertrail.host', 'logs.papertrailapp.com');
-  }
-
-  static getFunctionName() {
-    return 'papertrailLogger';
-  }
-
-  getEnvFilePath() {
-    return path.join(this.serverless.config.servicePath, PapertrailLogging.getFunctionName());
-  }
-
-  beforePackageCreateDeploymentArtifacts() {
-    this.serverless.cli.log('Creating temporary logger function...');
-    let functionPath = this.getEnvFilePath();
-
-    if (!fs.existsSync(functionPath)) {
-      fs.mkdirSync(functionPath);
-    }
-
-    const loggerFunctionFullName = `${this.service.service}-${this.service.provider.stage}-${PapertrailLogging.getFunctionName()}`;
-    _.merge(
-      this.service.provider.compiledCloudFormationTemplate.Resources,
-      {
-        PapertrailLoggerLogGroup: {
-          Type: "AWS::Logs::LogGroup",
-          Properties: {
-            LogGroupName: `/aws/lambda/${loggerFunctionFullName}`,
-          },
-        },
-      }
-    );
-
-    let templatePath = path.resolve(__dirname, './logger.handler.js');
-    let templateFile = fs.readFileSync(templatePath, 'utf-8');
-
-    let handlerFunction = templateFile
-      .replace('%papertrailHost%', this.papertrailHost)
-      .replace('%papertrailPort%', this.service.custom.papertrail.port)
-      .replace('%papertrailHostname%', this.service.service)
-      .replace('%papertrailProgram%', this.service.provider.stage);
-
-
-      var zip = new AdmZip();
-      zip.addFile(this.getEnvFilePath(), new Buffer(handlerFunction), "Logger Function");
-      zip.writeZip("./logger.zip");
-
-    this.service.functions[PapertrailLogging.getFunctionName()] = {
-      handler: `${PapertrailLogging.getFunctionName()}/handler.handler`,
-      name: loggerFunctionFullName,
-      tags: _.has(this.service.provider, 'stackTags') ? this.service.provider.stackTags : {},
-      runtime: 'nodejs6.10',
-      package: {
-        artifact: "./logger.zip"
-      },
-      events: [],
-    };
   }
 
   beforePackageCompileEvents() {
     this.serverless.cli.log('Creating log subscriptions...');
-
-    const loggerLogicalId = this.provider.naming.getLambdaLogicalId(PapertrailLogging.getFunctionName());
-
-    _.each(this.service.provider.compiledCloudFormationTemplate.Resources, (item, key) => {
-      if (_.has(item, 'Type') && item.Type === 'AWS::Logs::LogGroup') {
-        this.service.provider.compiledCloudFormationTemplate.Resources[key].Properties.RetentionInDays = 30;
-      }
-    });
-
+    let loggerLogicalId = this.provider.naming.getLambdaLogicalId(this.loggerFnName)
     _.merge(
       this.service.provider.compiledCloudFormationTemplate.Resources,
       {
@@ -108,9 +38,9 @@ class PapertrailLogging {
       }
     );
 
-    const functions = this.service.getAllFunctions();
+    let functions = this.service.getAllFunctions();
     functions.forEach((functionName) => {
-      if (functionName !== PapertrailLogging.getFunctionName()) {
+      if (functionName !== this.loggerFnName) {
         const functionData = this.service.getFunction(functionName);
         const normalizedFunctionName = this.provider.naming.getNormalizedFunctionName(functionName);
         _.merge(
@@ -129,9 +59,6 @@ class PapertrailLogging {
         );
       }
     });
-  }
-
-  afterDeployDeploy() {
   }
 }
 
