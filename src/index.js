@@ -10,7 +10,10 @@ class PapertrailLogging {
   constructor(serverless) {
     this.serverless = serverless;
     this.service = serverless.service;
-    this.loggerFnName = `${this.service.custom.stage}-all-to-papertrail`
+    this.loggerFnArn = this.service.custom.papertrail.log_function_arn
+    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    console.log( this.loggerFnArn)
+    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     this.provider = this.serverless.getProvider('aws');
 
@@ -21,43 +24,39 @@ class PapertrailLogging {
 
   beforePackageCompileEvents() {
     this.serverless.cli.log('Creating log subscriptions...');
-    let loggerLogicalId = this.provider.naming.getLambdaLogicalId(this.loggerFnName)
     _.merge(
       this.service.provider.compiledCloudFormationTemplate.Resources,
       {
         LambdaPermissionForSubscription: {
           Type: 'AWS::Lambda::Permission',
           Properties: {
-            FunctionName: { 'Fn::GetAtt': [loggerLogicalId, 'Arn'] },
+            FunctionName: this.loggerFnArn,
             Action: 'lambda:InvokeFunction',
             Principal: { 'Fn::Sub': 'logs.${AWS::Region}.amazonaws.com' },
             SourceArn: { 'Fn::Sub': 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*' },
-          },
-          DependsOn: [loggerLogicalId],
+          }
         },
       }
     );
 
     let functions = this.service.getAllFunctions();
-    functions.forEach((functionName) => {
-      if (functionName !== this.loggerFnName) {
-        const functionData = this.service.getFunction(functionName);
-        const normalizedFunctionName = this.provider.naming.getNormalizedFunctionName(functionName);
-        _.merge(
-          this.service.provider.compiledCloudFormationTemplate.Resources,
-          {
-            [`${normalizedFunctionName}SubscriptionFilter`]: {
-              Type: 'AWS::Logs::SubscriptionFilter',
-              Properties: {
-                DestinationArn: { 'Fn::GetAtt': [loggerLogicalId, "Arn"] },
-                FilterPattern: '',
-                LogGroupName: `/aws/lambda/${functionData.name}`,
-              },
-              DependsOn: ['LambdaPermissionForSubscription'],
+    functions.forEach(functionName => {
+      let functionData = this.service.getFunction(functionName);
+      let normalizedFunctionName = this.provider.naming.getNormalizedFunctionName(functionName);
+      _.merge(
+        this.service.provider.compiledCloudFormationTemplate.Resources,
+        {
+          [`${normalizedFunctionName}SubscriptionFilter`]: {
+            Type: 'AWS::Logs::SubscriptionFilter',
+            Properties: {
+              DestinationArn: this.loggerFnArn,
+              FilterPattern: '',
+              LogGroupName: `/aws/lambda/${functionData.name}`,
             },
-          }
-        );
-      }
+            DependsOn: ['LambdaPermissionForSubscription'],
+          },
+        }
+      );
     });
   }
 }
