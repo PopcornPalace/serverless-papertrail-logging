@@ -10,11 +10,6 @@ class PapertrailLogging {
   constructor(serverless) {
     this.serverless = serverless;
     this.service = serverless.service;
-    this.loggerFnArn = this.service.custom.papertrail.log_function_arn
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-    console.log( this.loggerFnArn)
-    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
     this.provider = this.serverless.getProvider('aws');
 
     this.hooks = {
@@ -24,13 +19,14 @@ class PapertrailLogging {
 
   beforePackageCompileEvents() {
     this.serverless.cli.log('Creating log subscriptions...');
+    let logFnArn = this.service.custom.papertrail.log_function_arn
     _.merge(
       this.service.provider.compiledCloudFormationTemplate.Resources,
       {
         LambdaPermissionForSubscription: {
           Type: 'AWS::Lambda::Permission',
           Properties: {
-            FunctionName: this.loggerFnArn,
+            FunctionName: logFnArn,
             Action: 'lambda:InvokeFunction',
             Principal: { 'Fn::Sub': 'logs.${AWS::Region}.amazonaws.com' },
             SourceArn: { 'Fn::Sub': 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*' },
@@ -49,7 +45,7 @@ class PapertrailLogging {
           [`${normalizedFunctionName}SubscriptionFilter`]: {
             Type: 'AWS::Logs::SubscriptionFilter',
             Properties: {
-              DestinationArn: this.loggerFnArn,
+              DestinationArn: logFnArn,
               FilterPattern: '',
               LogGroupName: `/aws/lambda/${functionData.name}`,
             },
