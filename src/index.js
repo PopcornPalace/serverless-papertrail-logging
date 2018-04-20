@@ -49,7 +49,7 @@ class PapertrailLogging {
               FilterPattern: '',
               LogGroupName: `/aws/lambda/${functionData.name}`,
             },
-            DependsOn: ['LambdaPermissionForSubscription'],
+            DependsOn: ['LambdaPermissionForSubscription', `${normalizedFunctionName}LogGroup`],
           },
         }
       );
